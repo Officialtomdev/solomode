@@ -39,7 +39,7 @@ function Run-SoloMode {
     $installDate = systeminfo | findstr /C:"Original Install Date"
 
      $services = @(
-        "pcasvc","DPS","Diagtrack","sysmain","eventlog","sgrmbroker","cdpusersvc", "BAM"
+        "pcasvc","DPS","Diagtrack","sysmain","eventlog","sgrmbroker","cdpusersvc"
     ) | ForEach-Object {
         Get-Service | findstr -i $_
     }
