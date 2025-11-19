@@ -38,10 +38,10 @@ function Run-SoloMode {
     $hostname = systeminfo | findstr /C:"Host Name"
     $installDate = systeminfo | findstr /C:"Original Install Date"
 
-    $services = @(
+     $services = @(
         "pcasvc","DPS","Diagtrack","sysmain","eventlog","sgrmbroker","cdpusersvc", "BAM"
     ) | ForEach-Object {
-        Get-Service | Where-Object { $_.Name -match $_ }
+        Get-Service | findstr -i $_
     }
 
     Write-Host "`nSystem Information:" -ForegroundColor Cyan
