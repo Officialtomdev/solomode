@@ -1,6 +1,5 @@
 Clear-Host
 
-
 $soloArt = @"
  ________  ________  ___       ________          _____ ______   ________  ________  _______      
 |\   ____\|\   __  \|\  \     |\   __  \        |\   _ \  _   \|\   __  \|\   ___ \|\  ___ \     
@@ -14,6 +13,8 @@ $soloArt = @"
 Made by Tomdevw
 "@
 
+
+
 function Show-MainMenu {
     Clear-Host
     Write-Host $soloArt -ForegroundColor Cyan
@@ -23,6 +24,8 @@ function Show-MainMenu {
     Write-Host "3) Delete C:\Solomode Folder"
     Write-Host ""
 }
+
+
 
 function Run-SoloMode {
     Clear-Host
@@ -50,9 +53,9 @@ function Run-SoloMode {
 
     if ($webhook -ne "n" -and $webhook.Trim() -ne "") {
         Write-Host "`n[Webhook Enabled — Insert your authorized webhook code here]" -ForegroundColor Yellow
-
+        
         <#
-            INSERT YOUR OWN WEBHOOK CODE HERE (SAFE PLACE)
+            PLACE YOUR WEBHOOK CODE HERE
         #>
     }
 
@@ -60,13 +63,14 @@ function Run-SoloMode {
     Start-Sleep 2
 }
 
+
+
 function Run-ToolsInstaller {
     Clear-Host
     Write-Host $soloArt -ForegroundColor Cyan
     Write-Host "[Tools Installer Running...]" -ForegroundColor Cyan
 
-    
-    $BaseDir = "C:\Solomode"
+    $BaseDir = "C:\Screenshare"
     $LogFile = "$BaseDir\download-log.txt"
     New-Item -ItemType Directory -Path $BaseDir -Force | Out-Null
     $ProgressPreference = 'SilentlyContinue'
@@ -87,46 +91,28 @@ function Run-ToolsInstaller {
 
     [Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12
 
-    $jobs = @()
     foreach ($tool in $Tools) {
-        $jobScript = {
-            param($ToolName, $ToolUrl, $OutputPath, $LogPath)
-            [Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12
-            try {
-                $start = Get-Date
-                Invoke-WebRequest -Uri $ToolUrl -OutFile $OutputPath -ErrorAction Stop
-                $elapsed = [math]::Round((New-TimeSpan $start (Get-Date)).TotalSeconds, 1)
-                Add-Content -Path $LogPath -Value "$(Get-Date -Format 'u') - Downloaded: $ToolName ($elapsed s)"
-                Write-Host "[+] $ToolName downloaded successfully ($elapsed s)"
-            }
-            catch {
-                Add-Content -Path $LogPath -Value "$(Get-Date -Format 'u') - FAILED: $ToolName ($ToolUrl)"
-                Write-Warning "Failed to download $ToolName"
-            }
+        try {
+            $start = Get-Date
+            Invoke-WebRequest -Uri $tool.Url -OutFile (Join-Path $BaseDir $tool.File) -ErrorAction Stop
+            $elapsed = [math]::Round((New-TimeSpan $start (Get-Date)).TotalSeconds, 1)
+            Add-Content $LogFile "$(Get-Date -Format 'u') - Downloaded: $tool.Name ($elapsed s)"
+            Write-Host "[+] $tool.Name downloaded successfully ($elapsed s)"
         }
-        $jobs += Start-Job -ScriptBlock $jobScript -ArgumentList $tool.Name, $tool.Url, (Join-Path $BaseDir $tool.File), $LogFile
+        catch {
+            Add-Content $LogFile "$(Get-Date -Format 'u') - FAILED: $tool.Name ($tool.Url)"
+            Write-Warning "Failed to download $tool.Name"
+        }
     }
 
-    $jobs | Wait-Job | Receive-Job
-    $jobs | Remove-Job -Force
-
-    if (Test-Path $LogFile) {
-        if (Select-String -Path $LogFile -Pattern "FAILED" -Quiet) {
-            Write-Host "`n  Some downloads failed. Check log for details." -ForegroundColor Yellow
-        } else {
-            Write-Host "`n  All downloads completed successfully." -ForegroundColor Green
-        }
-    } else {
-        Write-Host "`n  No downloads completed." -ForegroundColor Red
-    }
-
+    Write-Host "`nInstaller Finished." -ForegroundColor Cyan
     Write-Host "Location: $BaseDir"
     Write-Host "Log: $LogFile"
 
-
-    Write-Host "`nReturning to Main Menu..." -ForegroundColor Cyan
     Start-Sleep 3
 }
+
+
 
 function Delete-SolomodeFolder {
     Clear-Host
@@ -143,8 +129,7 @@ function Delete-SolomodeFolder {
     }
 
     Write-Host "Are you sure you want to delete the folder:" -ForegroundColor Yellow
-    Write-Host "$path" -ForegroundColor Cyan
-    Write-Host ""
+    Write-Host $path -ForegroundColor Cyan
     $confirm = Read-Host "Type Y to confirm"
 
     if ($confirm -eq "Y") {
@@ -163,14 +148,18 @@ function Delete-SolomodeFolder {
     Start-Sleep 2
 }
 
+
 while ($true) {
-    Show-MainMenu()
-    $choice = Read-Host -Prompt "Choose an option"
+    Show-MainMenu
+    $choice = Read-Host "Choose an option"
 
     switch ($choice) {
         "1" { Run-SoloMode }
         "2" { Run-ToolsInstaller }
         "3" { Delete-SolomodeFolder }
-        default { Write-Host "Invalid option." -ForegroundColor Red; Start-Sleep 1 }
+        default {
+            Write-Host "Invalid option." -ForegroundColor Red
+            Start-Sleep 1
+        }
     }
 }
