@@ -54,13 +54,11 @@ function Run-SoloMode {
     if ($webhook -ne "n" -and $webhook.Trim() -ne "") {
         Write-Host "`n[Webhook Enabled — Insert your authorized webhook code here]" -ForegroundColor Yellow
         
-        <#
-            PLACE YOUR WEBHOOK CODE HERE
-        #>
+      
     }
 
     Write-Host "`nReturning to Main Menu..." -ForegroundColor Cyan
-    Start-Sleep 2
+    Start-Sleep 5
 }
 
 
