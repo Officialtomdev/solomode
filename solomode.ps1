@@ -1,6 +1,6 @@
 Clear-Host
 
-# ASCII Art Banner
+
 $soloArt = @"
  ________  ________  ___       ________          _____ ______   ________  ________  _______      
 |\   ____\|\   __  \|\  \     |\   __  \        |\   _ \  _   \|\   __  \|\   ___ \|\  ___ \     
@@ -13,6 +13,148 @@ $soloArt = @"
 
 Made by Tomdevw
 "@
+
+
+function Install-Tool {
+    param(
+        [Parameter(Mandatory=$true)][string]$ToolName,
+        [Parameter(Mandatory=$true)][string]$Url,
+        [string]$ZipName = $null,
+        [string]$ExeName = $null,
+        [string[]]$Commands = $null,      
+        [switch]$NestedFolder,            
+        [switch]$IsExe,                   
+        [string]$BaseFolder = "C:\Solomode",
+        [switch]$Cleanup                 
+    )
+
+    $null = New-Item -ItemType Directory -Path $BaseFolder -Force
+
+    $ToolFolder = Join-Path $BaseFolder $ToolName
+    New-Item -ItemType Directory -Path $ToolFolder -Force | Out-Null
+
+    if ($ExeName) {
+        $DownloadFile = Join-Path $ToolFolder $ExeName
+    } elseif ($ZipName) {
+        $DownloadFile = Join-Path $ToolFolder $ZipName
+    } else {
+        $DownloadFile = Join-Path $ToolFolder (Split-Path $Url -Leaf)
+    }
+
+    Write-Host "[=] Getting $ToolName from $Url"
+
+    try {
+        Invoke-WebRequest -Uri $Url -OutFile $DownloadFile -UseBasicParsing -ErrorAction Stop
+        Write-Host "[+] Downloaded: $ToolName -> $DownloadFile" -ForegroundColor Green
+    }
+    catch {
+        Write-Warning "[!] Failed to download $ToolName : $_"
+        return @{
+            Name = $ToolName
+            Success = $false
+            Error = $_.Exception.Message
+        }
+    }
+
+    if ($ZipName -and -not $IsExe) {
+        try {
+            Write-Host "[=] Extracting $DownloadFile to $ToolFolder"
+            Add-Type -AssemblyName System.IO.Compression.FileSystem -ErrorAction SilentlyContinue
+            [System.IO.Compression.ZipFile]::ExtractToDirectory($DownloadFile, $ToolFolder)
+
+            if ($NestedFolder) {
+                $ExtractedFolderName = [IO.Path]::GetFileNameWithoutExtension($ZipName)
+                $ExeDir = Join-Path $ToolFolder $ExtractedFolderName
+            } else {
+                $ExeDir = $ToolFolder
+            }
+
+            if ($Commands) {
+                foreach ($cmd in $Commands) {
+                    $processedCmd = $cmd.Replace("{folder}", $ToolFolder)
+                    Write-Host "[CMD] Running: $processedCmd"
+
+                    $parts = $processedCmd -split ' '
+                    $exe = Join-Path $ExeDir $parts[0]
+                    $args = @()
+                    if ($parts.Count -gt 1) { $args = $parts[1..($parts.Count - 1)] }
+
+                    try {
+                        Start-Process -FilePath $exe -ArgumentList $args -WorkingDirectory $ExeDir -NoNewWindow -Wait -ErrorAction Stop
+                    } catch {
+                        Write-Warning "[!] Command failed for $ToolName : $_"
+                    }
+                }
+            }
+
+            if ($Cleanup) {
+                Remove-Item -LiteralPath $DownloadFile -Force -ErrorAction SilentlyContinue
+                Write-Host "[X] Removed archive: $DownloadFile"
+            }
+
+            return @{
+                Name = $ToolName
+                Success = $true
+                Path = $ToolFolder
+            }
+        }
+        catch {
+            Write-Warning "[!] Failed to extract $ToolName : $_"
+            return @{
+                Name = $ToolName
+                Success = $false
+                Error = $_.Exception.Message
+            }
+        }
+    }
+    elseif ($IsExe) {
+        try {
+            if ($Commands) {
+                foreach ($cmd in $Commands) {
+                    $processedCmd = $cmd.Replace("{folder}", $ToolFolder)
+                    Write-Host "[CMD] Running: $processedCmd"
+
+                    $parts = $processedCmd -split ' '
+                    $exe = $DownloadFile   
+                    $args = @()
+                    if ($parts.Count -gt 1) { $args = $parts[1..($parts.Count - 1)] }
+
+                    try {
+                        Start-Process -FilePath $exe -ArgumentList $args -WorkingDirectory $ToolFolder -NoNewWindow -Wait -ErrorAction Stop
+                    } catch {
+                        Write-Warning "[!] Command failed for $ToolName : $_"
+                    }
+                }
+            }
+
+            if ($Cleanup) {
+                Remove-Item -LiteralPath $DownloadFile -Force -ErrorAction SilentlyContinue
+                Write-Host "[X] Removed exe: $DownloadFile"
+            }
+
+            return @{
+                Name = $ToolName
+                Success = $true
+                Path = $ToolFolder
+            }
+        } catch {
+            Write-Warning "[!] Error processing EXE for $ToolName : $_"
+            return @{
+                Name = $ToolName
+                Success = $false
+                Error = $_.Exception.Message
+            }
+        }
+    }
+    else {
+        Write-Host "[+] $ToolName saved as $DownloadFile (no extraction requested)"
+        return @{
+            Name = $ToolName
+            Success = $true
+            Path = $ToolFolder
+        }
+    }
+}
 
 
 function Show-MainMenu {
@@ -35,13 +177,20 @@ function Run-SoloMode {
 
     $webhook = Read-Host -Prompt "Enter webhook URL (or type 'n' for none)"
 
-    $hostname = systeminfo | findstr /C:"Host Name"
-    $installDate = systeminfo | findstr /C:"Original Install Date"
+    $hostname = (systeminfo | findstr /C:"Host Name").Trim()
+    $installDate = (systeminfo | findstr /C:"Original Install Date").Trim()
 
-     $services = @(
+    $serviceNames = @(
         "pcasvc","DPS","Diagtrack","sysmain","eventlog","sgrmbroker","cdpusersvc"
-    ) | ForEach-Object {
-        Get-Service | findstr -i $_
+    )
+
+    $services = foreach ($svc in $serviceNames) {
+        try {
+            $s = Get-Service -Name $svc -ErrorAction Stop
+            [PSCustomObject]@{ Name = $s.Name; Status = $s.Status }
+        } catch {
+            [PSCustomObject]@{ Name = $svc; Status = "Not Found" }
+        }
     }
 
     Write-Host "`nSystem Information:" -ForegroundColor Cyan
@@ -52,74 +201,218 @@ function Run-SoloMode {
     $services | ForEach-Object { Write-Host "$($_.Name): $($_.Status)" }
 
     if ($webhook -ne "n" -and $webhook.Trim() -ne "") {
-        Write-Host "`n[Webhook Enabled — Insert your authorized webhook code here]" -ForegroundColor Yellow
+        $payload = @{
+            embeds = @(
+                @{
+                    title = "Solo Mode Report"
+                    color = 5814783
+                    fields = @(
+                        @{ name = "Hostname"; value = $hostname },
+                        @{ name = "Install Date"; value = $installDate },
+                        @{
+                            name = "Service Status"
+                            value = ($services | ForEach-Object { "$($_.Name): $($_.Status)" }) -join "`n"
+                        }
+                    )
+                }
+            )
+        } | ConvertTo-Json -Depth 5
+
+        try {
+            Invoke-RestMethod -Uri $webhook -Method Post -ContentType "application/json" -Body $payload -ErrorAction Stop
+            Write-Host "`nWebhook sent successfully!" -ForegroundColor Green
+        } catch {
+            Write-Host "`nFailed to send webhook: $_" -ForegroundColor Red
+        }
     }
 
     Write-Host "`nReturning to Main Menu..." -ForegroundColor Cyan
     Start-Sleep 3
 }
 
-
 function Run-ToolsInstaller {
     Clear-Host
     Write-Host $soloArt -ForegroundColor Cyan
     Write-Host "[Tools Installer Running...]" -ForegroundColor Cyan
+    Write-Host ""
 
     $BaseDir = "C:\Solomode"
-    $LogFile = "$BaseDir\download-log.txt"
+    $LogFile = Join-Path $BaseDir "download-log.txt"
     New-Item -ItemType Directory -Path $BaseDir -Force | Out-Null
     $ProgressPreference = 'SilentlyContinue'
 
-    Write-Host "All tools will be saved in: $BaseDir`n"
-
-    $Tools = @(
-    @{ Name="Amcache Parser"; Url="https://download.ericzimmermanstools.com/net9/AmcacheParser.zip"; File="AmcacheParser.exe" },
-    @{ Name="ShimCache Parser"; Url="https://download.ericzimmermanstools.com/AppCompatCacheParser.zip"; File="AppCompatCacheParser.exe" },
-    @{ Name="HxD"; Url="https://mh-nexus.de/downloads/HxDSetup.zip"; File="HxDSetup.exe" },
-    @{ Name="HayaBusa"; Url="https://github.com/Yamato-Security/hayabusa/releases/download/v3.1.1/hayabusa-3.1.1-win-x64.zip"; File="hayabusa-3.1.1-win-x64.exe" },
-    @{ Name="Everything Tool"; Url="https://www.voidtools.com/Everything-1.4.1.1026.x64-Setup.exe"; File="Everything-1.4.1.1026.x64-Setup.exe" },
-    @{ Name="System Informer Canary"; Url="https://github.com/winsiderss/si-builds/releases/download/3.2.25078.1756/systeminformer-3.2.25078.1756-canary-setup.exe"; File="systeminformer-3.2.25078.1756-canary-setup.exe" },
-    @{ Name="bstrings"; Url="https://download.ericzimmermanstools.com/net9/bstrings.zip"; File="bstrings.exe" },
-    @{ Name="Detect It Easy"; Url="https://github.com/horsicq/DIE-engine/releases/download/3.10/die_win64_portable_3.10_x64.zip"; File="die_win64_portable_3.10_x64.exe" },
-    @{ Name="JumpList Explorer"; Url="https://download.ericzimmermanstools.com/net6/JumpListExplorer.zip"; File="JumpListExplorer.exe" },
-    @{ Name="MFTECmd"; Url="https://download.ericzimmermanstools.com/MFTECmd.zip"; File="MFTECmd.exe" },
-    @{ Name="usnhelper"; Url="https://raw.githubusercontent.com/txchnology/test/main/usnjrnl_rewind.exe"; File="usnhelper.exe" },
-    @{ Name="PECmd"; Url="https://download.ericzimmermanstools.com/net9/PECmd.zip"; File="PECmd.exe" },
-    @{ Name="Registry Explorer"; Url="https://download.ericzimmermanstools.com/net9/RegistryExplorer.zip"; File="RegistryExplorer.exe" },
-    @{ Name="SrumECmd"; Url="https://download.ericzimmermanstools.com/net9/SrumECmd.zip"; File="SrumECmd.exe" },
-    @{ Name="Timeline Explorer"; Url="https://download.ericzimmermanstools.com/net9/TimelineExplorer.zip"; File="TimelineExplorer.exe" },
-    @{ Name="WxTCmd"; Url="https://download.ericzimmermanstools.com/net9/WxTCmd.zip"; File="WxTCmd.exe" },
-    @{ Name="RamDump Explorer"; Url="https://github.com/bacanoicua/RAMDumpExplorer/releases/download/1.0/RAMDumpExplorer.exe"; File="RAMDumpExplorer.exe" },
-    @{ Name="UsbDeview"; Url="https://www.nirsoft.net/utils/usbdeview-x64.zip"; File="usbdeview-x64.exe" },
-    @{ Name="AlternateStreamView"; Url="https://www.nirsoft.net/utils/alternatestreamview-x64.zip"; File="alternatestreamview-x64.exe" },
-    @{ Name="WinPrefetchView"; Url="https://www.nirsoft.net/utils/winprefetchview-x64.zip"; File="winprefetchview-x64.exe" },
-    @{ Name="Paths Parser"; Url="https://github.com/spokwn/PathsParser/releases/download/v1.0.11/PathsParser.exe"; File="PathsParser.exe" },
-    @{ Name="Prefetch Parser"; Url="https://github.com/spokwn/prefetch-parser/releases/download/v1.5.4/PrefetchParser.exe"; File="PrefetchParser.exe" },
-    @{ Name="Process Parser"; Url="https://github.com/spokwn/process-parser/releases/download/v0.5.4/ProcessParser.exe"; File="ProcessParser.exe" },
-    @{ Name="PcaSvc Executed"; Url="https://github.com/spokwn/pcasvc-executed/releases/download/v0.8.6/PcaSvcExecuted.exe"; File="PcaSvcExecuted.exe" },
-    @{ Name="BAM Parser"; Url="https://github.com/spokwn/BAM-parser/releases/download/v1.2.7/BAMParser.exe"; File="BAMParser.exe" },
-    @{ Name="JournalTrace"; Url="https://github.com/spokwn/JournalTrace/releases/download/1.2/JournalTrace.exe"; File="JournalTrace.exe" },
-    @{ Name="ReplaceParser"; Url="https://github.com/spokwn/Replaceparser/releases/download/v1.1-recode/ReplaceParser.exe"; File="ReplaceParser.exe" },
-    @{ Name="RECmd"; Url="https://download.ericzimmermanstools.com/net9/RECmd.zip"; File="RECmd.exe" },
-    @{ Name="Velociraptor"; Url="https://github.com/Velocidex/velociraptor/releases/download/v0.73/velociraptor-v0.73.4-windows-amd64.exe"; File="velociraptor.exe" },
-    @{ Name="WinLiveInfo"; Url="https://github.com/kacos2000/Win10LiveInfo/releases/download/v.1.0.23.0/WinLiveInfo.exe"; File="WinLiveInfo.exe" },
-    @{ Name="ExeInfoPe"; Url="https://cdn.discordapp.com/attachments/1280238836626231379/1280238836814712983/exeinfope.zip?ex=682d7814&is=682c2694&hm=3152a4be175e0a18ea93c84618c21b587d9a4237ec2cb0e519a830690c1cec99&"; File="exeinfope.exe" }
-)
-
-
     [Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12
 
-    foreach ($tool in $Tools) {
-        try {
-            $start = Get-Date
-            Invoke-WebRequest -Uri $tool.Url -OutFile (Join-Path $BaseDir $tool.File) -ErrorAction Stop
-            $elapsed = [math]::Round((New-TimeSpan $start (Get-Date)).TotalSeconds, 1)
-            Add-Content $LogFile "$(Get-Date -Format 'u') - Downloaded: $($tool.Name) ($elapsed s)"
-            Write-Host "[+] $($tool.Name) downloaded successfully ($elapsed s)" -ForegroundColor Green
-        }
-        catch {
-            Add-Content $LogFile "$(Get-Date -Format 'u') - FAILED: $($tool.Name) ($($tool.Url))"
-            Write-Warning "Failed to download $($tool.Name)"
+    Write-Host "All tools will be saved in: $BaseDir`n"
+
+    $results = @()
+
+    $results += Install-Tool -ToolName "AmcacheParser" `
+                             -Url "https://download.ericzimmermanstools.com/net9/AmcacheParser.zip" `
+                             -ZipName "AmcacheParser.zip" `
+                             -Commands @("AmcacheParser.exe -f C:\Windows\appcompat\Programs\Amcache.hve --csv {folder}") `
+                             -Cleanup
+
+    $results += Install-Tool -ToolName "ShimCacheParser" `
+                             -Url "https://download.ericzimmermanstools.com/AppCompatCacheParser.zip" `
+                             -ZipName "AppCompatCacheParser.zip" `
+                             -Commands @("AppCompatCacheParser.exe --csv {folder}") `
+                             -Cleanup
+
+    $results += Install-Tool -ToolName "HxD" `
+                             -Url "https://mh-nexus.de/downloads/HxDSetup.zip" `
+                             -ZipName "HxDSetup.zip" `
+                             -Cleanup
+
+    $results += Install-Tool -ToolName "Hayabusa" `
+                             -Url "https://github.com/Yamato-Security/hayabusa/releases/download/v3.1.1/hayabusa-3.1.1-win-x64.zip" `
+                             -ZipName "hayabusa-3.1.1-win-x64.zip" `
+                             -Cleanup
+
+    $results += Install-Tool -ToolName "Everything" `
+                             -Url "https://www.voidtools.com/Everything-1.4.1.1026.x64-Setup.exe" `
+                             -ExeName "Everything-1.4.1.1026.x64-Setup.exe" `
+                             -IsExe
+
+    $results += Install-Tool -ToolName "SystemInformerCanary" `
+                             -Url "https://github.com/winsiderss/si-builds/releases/download/3.2.25078.1756/systeminformer-3.2.25078.1756-canary-setup.exe" `
+                             -ExeName "systeminformer-3.2.25078.1756-canary-setup.exe" `
+                             -IsExe
+
+    $results += Install-Tool -ToolName "bstrings" `
+                             -Url "https://download.ericzimmermanstools.com/net9/bstrings.zip" `
+                             -ZipName "bstrings.zip" `
+                             -Cleanup
+
+    $results += Install-Tool -ToolName "DetectItEasy" `
+                             -Url "https://github.com/horsicq/DIE-engine/releases/download/3.10/die_win64_portable_3.10_x64.zip" `
+                             -ZipName "die_win64_portable_3.10_x64.zip" `
+                             -Cleanup
+
+    $results += Install-Tool -ToolName "JumpListExplorer" `
+                             -Url "https://download.ericzimmermanstools.com/net6/JumpListExplorer.zip" `
+                             -ZipName "JumpListExplorer.zip" `
+                             -Cleanup
+
+    $results += Install-Tool -ToolName "MFTECmd" `
+                             -Url "https://download.ericzimmermanstools.com/MFTECmd.zip" `
+                             -ZipName "MFTECmd.zip" `
+                             -Commands @("MFTECmd.exe -f C:\$Extend\$UsnJrnl:$J -m C:\$MFT --csv {folder}") `
+                             -Cleanup
+
+    $results += Install-Tool -ToolName "usnhelper" `
+                             -Url "https://raw.githubusercontent.com/txchnology/test/main/usnjrnl_rewind.exe" `
+                             -ExeName "usnhelper.exe" `
+                             -IsExe
+
+    $results += Install-Tool -ToolName "PECmd" `
+                             -Url "https://download.ericzimmermanstools.com/net9/PECmd.zip" `
+                             -ZipName "PECmd.zip" `
+                             -Cleanup
+
+    $results += Install-Tool -ToolName "RegistryExplorer" `
+                             -Url "https://download.ericzimmermanstools.com/net9/RegistryExplorer.zip" `
+                             -ZipName "RegistryExplorer.zip" `
+                             -Cleanup
+
+    $results += Install-Tool -ToolName "SrumECmd" `
+                             -Url "https://download.ericzimmermanstools.com/net9/SrumECmd.zip" `
+                             -ZipName "SrumECmd.zip" `
+                             -Commands @("SrumECmd.exe -f C:\Windows\System32\sru\SRUDB.dat --csv {folder}") `
+                             -Cleanup
+
+    $results += Install-Tool -ToolName "TimelineExplorer" `
+                             -Url "https://download.ericzimmermanstools.com/net9/TimelineExplorer.zip" `
+                             -ZipName "TimelineExplorer.zip" `
+                             -Cleanup
+
+    $results += Install-Tool -ToolName "WxTCmd" `
+                             -Url "https://download.ericzimmermanstools.com/net9/WxTCmd.zip" `
+                             -ZipName "WxTCmd.zip" `
+                             -Commands @("WxTCmd.exe -f C:\Users\$env:USERNAME\AppData\Local\ConnectedDevicesPlatform\d4004aa3b0cb4810\ActivitiesCache.db --csv {folder}") `
+                             -Cleanup
+
+    $results += Install-Tool -ToolName "RamDumpExplorer" `
+                             -Url "https://github.com/bacanoicua/RAMDumpExplorer/releases/download/1.0/RAMDumpExplorer.exe" `
+                             -ExeName "RAMDumpExplorer.exe" `
+                             -IsExe
+
+    $results += Install-Tool -ToolName "UsbDeview" `
+                             -Url "https://www.nirsoft.net/utils/usbdeview-x64.zip" `
+                             -ZipName "usbdeview-x64.zip" `
+                             -Cleanup
+
+    $results += Install-Tool -ToolName "AlternateStreamView" `
+                             -Url "https://www.nirsoft.net/utils/alternatestreamview-x64.zip" `
+                             -ZipName "alternatestreamview-x64.zip" `
+                             -Cleanup
+
+    $results += Install-Tool -ToolName "WinPrefetchView" `
+                             -Url "https://www.nirsoft.net/utils/winprefetchview-x64.zip" `
+                             -ZipName "winprefetchview-x64.zip" `
+                             -Cleanup
+
+    $results += Install-Tool -ToolName "PathsParser" `
+                             -Url "https://github.com/spokwn/PathsParser/releases/download/v1.0.11/PathsParser.exe" `
+                             -ExeName "PathsParser.exe" `
+                             -IsExe
+
+    $results += Install-Tool -ToolName "PrefetchParser" `
+                             -Url "https://github.com/spokwn/prefetch-parser/releases/download/v1.5.4/PrefetchParser.exe" `
+                             -ExeName "PrefetchParser.exe" `
+                             -IsExe
+
+    $results += Install-Tool -ToolName "ProcessParser" `
+                             -Url "https://github.com/spokwn/process-parser/releases/download/v0.5.4/ProcessParser.exe" `
+                             -ExeName "ProcessParser.exe" `
+                             -IsExe
+
+    $results += Install-Tool -ToolName "PcaSvcExecuted" `
+                             -Url "https://github.com/spokwn/pcasvc-executed/releases/download/v0.8.6/PcaSvcExecuted.exe" `
+                             -ExeName "PcaSvcExecuted.exe" `
+                             -IsExe
+
+    $results += Install-Tool -ToolName "BAMParser" `
+                             -Url "https://github.com/spokwn/BAM-parser/releases/download/v1.2.7/BAMParser.exe" `
+                             -ExeName "BAMParser.exe" `
+                             -IsExe
+
+    $results += Install-Tool -ToolName "JournalTrace" `
+                             -Url "https://github.com/spokwn/JournalTrace/releases/download/1.2/JournalTrace.exe" `
+                             -ExeName "JournalTrace.exe" `
+                             -IsExe
+
+    $results += Install-Tool -ToolName "ReplaceParser" `
+                             -Url "https://github.com/spokwn/Replaceparser/releases/download/v1.1-recode/ReplaceParser.exe" `
+                             -ExeName "ReplaceParser.exe" `
+                             -IsExe
+
+    $results += Install-Tool -ToolName "RECmd" `
+                             -Url "https://download.ericzimmermanstools.com/net9/RECmd.zip" `
+                             -ZipName "RECmd.zip" `
+                             -NestedFolder `
+                             -Cleanup
+
+    $results += Install-Tool -ToolName "Velociraptor" `
+                             -Url "https://github.com/Velocidex/velociraptor/releases/download/v0.73/velociraptor-v0.73.4-windows-amd64.exe" `
+                             -ExeName "velociraptor.exe" `
+                             -IsExe
+
+    $results += Install-Tool -ToolName "WinLiveInfo" `
+                             -Url "https://github.com/kacos2000/Win10LiveInfo/releases/download/v.1.0.23.0/WinLiveInfo.exe" `
+                             -ExeName "WinLiveInfo.exe" `
+                             -IsExe
+
+    $results += Install-Tool -ToolName "ExeInfoPe" `
+                             -Url "https://cdn.discordapp.com/attachments/1280238836626231379/1280238836814712983/exeinfope.zip" `
+                             -ZipName "exeinfope.zip" `
+                             -Cleanup
+
+    foreach ($r in $results) {
+        if ($r -is [hashtable] -and $r.Success) {
+            Add-Content -Path $LogFile -Value "$(Get-Date -Format 'u') - Installed: $($r.Name) -> $($r.Path)"
+        } elseif ($r -is [hashtable]) {
+            Add-Content -Path $LogFile -Value "$(Get-Date -Format 'u') - FAILED: $($r.Name) -> $($r.Error)"
         }
     }
 
@@ -145,7 +438,7 @@ function Delete-SolomodeFolder {
         return
     }
 
-    Write-Host "Are you sure you want to delete the folder:" -ForegroundColor Yellow
+    Write-Host "Are you sure you want to delete this folder?" -ForegroundColor Yellow
     Write-Host $path -ForegroundColor Cyan
     $confirm = Read-Host "Type Y to confirm"
 
@@ -155,7 +448,7 @@ function Delete-SolomodeFolder {
             Write-Host "`nFolder deleted successfully." -ForegroundColor Green
         }
         catch {
-            Write-Host "`nFailed to delete folder!" -ForegroundColor Red
+            Write-Host "`nFailed to delete folder! $_" -ForegroundColor Red
         }
     }
     else {
