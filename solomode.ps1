@@ -250,13 +250,11 @@ function Run-ToolsInstaller {
     $results += Install-Tool -ToolName "AmcacheParser" `
                              -Url "https://download.ericzimmermanstools.com/net9/AmcacheParser.zip" `
                              -ZipName "AmcacheParser.zip" `
-                             -Commands @("AmcacheParser.exe -f C:\Windows\appcompat\Programs\Amcache.hve --csv {folder}") `
                              -Cleanup
 
     $results += Install-Tool -ToolName "ShimCacheParser" `
                              -Url "https://download.ericzimmermanstools.com/AppCompatCacheParser.zip" `
                              -ZipName "AppCompatCacheParser.zip" `
-                             -Commands @("AppCompatCacheParser.exe --csv {folder}") `
                              -Cleanup
 
     $results += Install-Tool -ToolName "HxD" `
@@ -297,7 +295,6 @@ function Run-ToolsInstaller {
     $results += Install-Tool -ToolName "MFTECmd" `
                              -Url "https://download.ericzimmermanstools.com/MFTECmd.zip" `
                              -ZipName "MFTECmd.zip" `
-                             -Commands @("MFTECmd.exe -f C:\$Extend\$UsnJrnl:$J -m C:\$MFT --csv {folder}") `
                              -Cleanup
 
     $results += Install-Tool -ToolName "usnhelper" `
@@ -318,7 +315,6 @@ function Run-ToolsInstaller {
     $results += Install-Tool -ToolName "SrumECmd" `
                              -Url "https://download.ericzimmermanstools.com/net9/SrumECmd.zip" `
                              -ZipName "SrumECmd.zip" `
-                             -Commands @("SrumECmd.exe -f C:\Windows\System32\sru\SRUDB.dat --csv {folder}") `
                              -Cleanup
 
     $results += Install-Tool -ToolName "TimelineExplorer" `
@@ -329,7 +325,6 @@ function Run-ToolsInstaller {
     $results += Install-Tool -ToolName "WxTCmd" `
                              -Url "https://download.ericzimmermanstools.com/net9/WxTCmd.zip" `
                              -ZipName "WxTCmd.zip" `
-                             -Commands @("WxTCmd.exe -f C:\Users\$env:USERNAME\AppData\Local\ConnectedDevicesPlatform\d4004aa3b0cb4810\ActivitiesCache.db --csv {folder}") `
                              -Cleanup
 
     $results += Install-Tool -ToolName "RamDumpExplorer" `
