@@ -398,10 +398,29 @@ function Run-ToolsInstaller {
                              -ExeName "WinLiveInfo.exe" `
                              -IsExe
 
-    $results += Install-Tool -ToolName "ExeInfoPe" `
-                             -Url "https://cdn.discordapp.com/attachments/1280238836626231379/1280238836814712983/exeinfope.zip" `
-                             -ZipName "exeinfope.zip" `
+
+     $results += Install-Tool -ToolName "MagnetProcessCapture" `
+                             -Url "https://go.magnetforensics.com/e/52162/MagnetProcessCapture/kpt99v/1596068034/h/W_fAl_pThcDb-QN7ecFXAw8szOQU2dFtF_t_N383OvM" `
+                             -ZipName "MagnetProcessCaptureV13.zip" `
+                             -NestedFolder `
                              -Cleanup
+                    
+     $results += Install-Tool -ToolName "lastactivityview" `
+                             -Url "https://www.nirsoft.net/utils/lastactivityview.zip" `
+                             -ZipName "lastacitivityview.zip" `
+                             -NestedFolder `
+                             -Cleanup
+
+
+     $results += Install-Tool -ToolName "OSForensics" `
+                             -Url "https://osforensics.com/downloads/OSForensics.exe" `
+                             -ExeName "OSForensics.exe" `
+                             -IsExe
+
+
+                             
+
+ 
 
     foreach ($r in $results) {
         if ($r -is [hashtable] -and $r.Success) {
