@@ -418,6 +418,25 @@ function Run-ToolsInstaller {
                              -IsExe
 
 
+    $results += Install-Tool -ToolName "windeflog" `
+                             -Url "https://www.nirsoft.net/utils/windeflogview.zip" `
+                             -ZipName "windeflog.zip" `
+                             -NestedFolder `
+                             -Cleanup
+
+
+    $results += Install-Tool -ToolName "winprefetchview" `
+                             -Url "https://www.nirsoft.net/utils/winprefetchview-x64.zip" `
+                             -ZipName "winprefetchview.zip" `
+                             -NestedFolder `
+                             -Cleanup
+
+     $results += Install-Tool -ToolName "filerecovery" `
+                             -Url "https://www.nirsoft.net/utils/previousfilesrecovery-x64.zip" `
+                             -ZipName "filerecovery.zip" `
+                             -NestedFolder `
+                             -Cleanup
+
                              
 
  
